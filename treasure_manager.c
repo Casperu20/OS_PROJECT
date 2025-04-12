@@ -203,6 +203,84 @@ void view(char* hunt_dir, int ID){  // to view details of a specified treasure
     
 }
 
+void remove_treasure(char* hunt_dir, int ID){
+    char treasure_file[BUFF_SIZE];
+    snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.txt", hunt_dir);
+    char temp_treasure[BUFF_SIZE];
+    snprintf(temp_treasure, sizeof(temp_treasure), "%s/temp.txt", hunt_dir);
+
+    int file_tr = open(treasure_file, O_RDWR);
+    if(file_tr == -1){
+        printf("ERROR oppening file! ( in remove_treasure() )\n");
+        exit(1);
+    }
+
+    int temp_tr = open(temp_treasure, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if(temp_tr == -1){
+        printf("ERROR in remove_treasure() while creating temp_file!\n");
+        close(temp_tr);
+        exit(1);
+    }
+
+    Treasure treasure_read;
+    int found = 0;   // flag if we found the treasure
+
+    ssize_t bytes_read;
+    while((bytes_read = read(file_tr, &treasure_read, sizeof(Treasure))) == sizeof(Treasure)){
+        if(treasure_read.treasure_ID != ID){
+            write(temp_tr, &treasure_read, sizeof(Treasure));
+        }
+        else{
+            found = 1;
+        }
+    }
+    close(file_tr);
+    close(temp_tr);
+
+    if(found){
+        remove(treasure_file);
+        rename(temp_treasure, treasure_file);   // replace with the next one
+        printf("Treasure[%d] removed!\n", ID);
+        create_log(hunt_dir, "REMOVE treasure");
+    }
+    else{
+        remove(temp_treasure);
+        printf("Didn't found the treasure[%d]!\n", ID);
+        create_log(hunt_dir, "Coudn't remove the treasure!");
+    }
+}
+
+#include <dirent.h>
+
+void remove_hunt(char* hunt_dir){
+    DIR* directory = opendir(hunt_dir);
+    if(!directory){
+        printf("ERROR oppening directory %s! (in remove_hunt() )\n", hunt_dir);
+        exit(1);
+    }
+
+    struct dirent* entry;   // points to the directory entry (like a file or subfolder)
+    char treasure_file[BUFF_SIZE * 2];  // got a warning from snprintf that it could exceed the limit of 256
+
+    // i ll remove first the files in the directory
+    while((entry = readdir(directory))){
+        // each entry->d_name is a string(ex: treasure.txt)
+        if(strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")){
+            snprintf(treasure_file, sizeof(treasure_file), "%s/%s", hunt_dir, entry->d_name);
+            unlink(treasure_file); // remove it
+        }
+    }
+    closedir(directory);
+
+    rmdir(hunt_dir); // the actual removal of directory
+
+    char symbolic_link[BUFF_SIZE];
+    snprintf(symbolic_link, sizeof(symbolic_link), "logged_hunt-%s", hunt_dir);
+    unlink(symbolic_link);
+
+    printf("Hunt (direcotry) - %s REMOVED!\n", hunt_dir);
+}
+
 // inputul nostru poate fi txt !
 
 int main(int argc, char* argv[]){
@@ -229,6 +307,21 @@ int main(int argc, char* argv[]){
         }
         int ID = atoi(argv[3]);
         view(hunt_id, ID);
+    }
+    else if(strcmp(option, "remove_treasure") == 0){
+        if(argc < 4){
+            printf("USE: ./file remove_treasure <hunt_dir> <id>\n");
+            exit(1);
+        }
+        int ID = atoi(argv[3]);
+        remove_treasure(hunt_id, ID);
+    }
+    else if(strcmp(option, "remove_hunt") == 0){
+        if(argc < 3){
+            printf("USE: ./file remove_hunt <hunt_dir>\n");
+            exit(1);
+        }
+        remove_hunt(hunt_id);
     }
 
 
