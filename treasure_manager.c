@@ -3,9 +3,9 @@
 #include <string.h>
 #include <time.h>
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
+#include <unistd.h>     // FOR: write(), read() , unlink() - remove, close() and symlink() for creating the symbolic link
+#include <fcntl.h>      // FOR: open() and its flag like O_RDWR, O_CREAT ...
+#include <sys/stat.h>   // FOR: mkdir(), stat(), struct stat and the dir/files permisions 0644, 0755 ...
 
 #define BUFF_SIZE 256
 #define MAX 512
@@ -63,7 +63,7 @@ void create_log(char* hunt_dir, char* what_happend){
 
 void create_symbolic_link(char* hunt_dir){
     char link[BUFF_SIZE];
-    snprintf(link, sizeof(link), "logged-hunt-%s.lnk", hunt_dir);
+    snprintf(link, sizeof(link), "logged-hunt-%s", hunt_dir);
     unlink(link);   // remove if it already exists
 
     char target_location[BUFF_SIZE];
@@ -71,14 +71,14 @@ void create_symbolic_link(char* hunt_dir){
     symlink(target_location, link);  // this fnc creates symbolic links for files or dirs
 }
 
-void add(char* hunt_dir){
+void add(char* hunt_dir, FILE* input){
     // Create the directory for hunt if !exist
     mkdir(hunt_dir, 0755);
 
     char treasure_file[BUFF_SIZE]; // path to file
 
     // could have an overflow with just sprintf
-    snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.txt", hunt_dir); // found smth about .dat watch later
+    snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.dat", hunt_dir); // WITH .txt FILES WORKS PERFECLTY (that s how I implemented firstly)
 
     // open the file . IF !exist then create
     int file_tr = open(treasure_file, O_RDWR | O_CREAT | O_APPEND, 0664);
@@ -87,28 +87,21 @@ void add(char* hunt_dir){
         exit(1);
     }
 
-    // The treasure to add needs an initialization
-    Treasure new_treasure = { .treasure_ID = 1, .user_name = "1st_player", .GPS = {123.0087, 10.1223}, .clue = "Near the Oracle Bridge", .value = 100};
+    // hardcoded initialization for testing
+    // Treasure new_treasure = { .treasure_ID = 1, .user_name = "1st_player", .GPS = {123.0087, 10.1223}, .clue = "Near the Oracle Bridge", .value = 100};
+    Treasure new_treasure;
 
-    // or take them by hand 
-    /*
-    Treasure t;
-    printf("Enter Treasure ID: ");
-    scanf("%d", &t.treasure_ID);
+    if(fscanf(input, "%d", &new_treasure.treasure_ID) != 1 || fscanf(input, " %[^\n]", new_treasure.user_name) != 1 ||
+       fscanf(input, "%f %f", &new_treasure.GPS.latitude, &new_treasure.GPS.longitude) != 2 || fscanf(input, " %[^\n]", new_treasure.clue) != 1 ||
+       fscanf(input, "%d", &new_treasure.value) != 1){
+            printf("WRONG FORMAT in input file!\n");
+            fclose(input);
+            close(file_tr);
+            exit(1);
+    }
 
-    printf("Enter User Name: ");
-    scanf(" %[^\n]", t.user_name);
-
-    printf("Enter GPS latitude and longitude: ");
-    scanf("%f %f", &t.GPS.latitude, &t.GPS.longitude);
-
-    printf("Enter Clue: ");
-    scanf(" %[^\n]", t.clue);
-
-    printf("Enter Value: ");
-    scanf("%d", &t.value);
-    */
-
+    fclose(input);
+    
     // now write into the file
     ssize_t binary_written = write(file_tr, &new_treasure, sizeof(Treasure));
     if(binary_written != -1){
@@ -127,7 +120,7 @@ void add(char* hunt_dir){
 void list(char* hunt_dir){
     char treasure_file[BUFF_SIZE];
     // for now hope for not having an overflow
-    sprintf(treasure_file, "%s/treasure.txt", hunt_dir);
+    sprintf(treasure_file, "%s/treasure.dat", hunt_dir);
 
     int file_tr = open(treasure_file, O_RDWR | O_CREAT | O_APPEND, 0644);
     if(file_tr == -1){
@@ -165,7 +158,7 @@ void list(char* hunt_dir){
 
 void view(char* hunt_dir, int ID){  // to view details of a specified treasure
     char treasure_file[BUFF_SIZE];  // path of file
-    snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.txt", hunt_dir);
+    snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.dat", hunt_dir);
 
     int file_tr = open(treasure_file, O_RDWR);
     if(file_tr == -1){
@@ -205,9 +198,9 @@ void view(char* hunt_dir, int ID){  // to view details of a specified treasure
 
 void remove_treasure(char* hunt_dir, int ID){
     char treasure_file[BUFF_SIZE];
-    snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.txt", hunt_dir);
+    snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.dat", hunt_dir);
     char temp_treasure[BUFF_SIZE];
-    snprintf(temp_treasure, sizeof(temp_treasure), "%s/temp.txt", hunt_dir);
+    snprintf(temp_treasure, sizeof(temp_treasure), "%s/temp.dat", hunt_dir);
 
     int file_tr = open(treasure_file, O_RDWR);
     if(file_tr == -1){
@@ -260,11 +253,11 @@ void remove_hunt(char* hunt_dir){
     }
 
     struct dirent* entry;   // points to the directory entry (like a file or subfolder)
-    char treasure_file[BUFF_SIZE * 2];  // got a warning from snprintf that it could exceed the limit of 256
+    char treasure_file[MAX];  // got a warning from snprintf that it could exceed the limit of 256
 
     // i ll remove first the files in the directory
     while((entry = readdir(directory))){
-        // each entry->d_name is a string(ex: treasure.txt)
+        // each entry->d_name is a string(ex: treasure.dat)
         if(strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")){
             snprintf(treasure_file, sizeof(treasure_file), "%s/%s", hunt_dir, entry->d_name);
             unlink(treasure_file); // remove it
@@ -294,10 +287,24 @@ int main(int argc, char* argv[]){
 
     printf("OPTION: %s\n\n", option);
 
+    FILE* input = fopen("input_for_add.txt", "r");
+    if (!input) {
+        perror("Error opening input FILE!\n");
+        exit(1);
+    }
+
     if(strcmp(option, "add") == 0){
-        add(hunt_id);
+        if(argc < 3){
+            printf("USE: ./file add <hunt_dir>\n");
+            exit(1);
+        }
+        add(hunt_id, input);
     }
     else if(strcmp(option, "list") == 0){
+        if(argc < 3){
+            printf("USE: ./file list <hunt_dir>\n");
+            exit(1);
+        }
         list(hunt_id);
     }
     else if(strcmp(option, "view") == 0){
@@ -324,8 +331,6 @@ int main(int argc, char* argv[]){
         remove_hunt(hunt_id);
     }
 
-
-
-
+    fclose(input);
     return 0;
 }
