@@ -1,3 +1,4 @@
+// Repo: https://github.com/Casperu20/OS_PROJECT
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,8 +100,6 @@ void add(char* hunt_dir, FILE* input){
             close(file_tr);
             exit(1);
     }
-
-    fclose(input);
     
     // now write into the file
     ssize_t binary_written = write(file_tr, &new_treasure, sizeof(Treasure));
@@ -115,6 +114,8 @@ void add(char* hunt_dir, FILE* input){
 
     create_log(hunt_dir, "ADD treasure");
     create_symbolic_link(hunt_dir);
+
+    fclose(input);
 }
 
 void list(char* hunt_dir){
@@ -274,7 +275,8 @@ void remove_hunt(char* hunt_dir){
     printf("Hunt (direcotry) - %s REMOVED!\n", hunt_dir);
 }
 
-// inputul nostru poate fi txt !
+// MODIFY THE FILE: input_for_add.txt
+// for each new treasure u want to add!
 
 int main(int argc, char* argv[]){
     if(argc < 2){
@@ -287,17 +289,18 @@ int main(int argc, char* argv[]){
 
     printf("OPTION: %s\n\n", option);
 
-    FILE* input = fopen("input_for_add.txt", "r");
-    if (!input) {
-        perror("Error opening input FILE!\n");
-        exit(1);
-    }
-
     if(strcmp(option, "add") == 0){
         if(argc < 3){
             printf("USE: ./file add <hunt_dir>\n");
             exit(1);
         }
+        FILE* input = fopen("input_for_add.txt", "r");
+        if (!input) {
+            printf("-> You need a file: input_for_add.txt -> For the details of adding, with the following configuration:\n\n");
+            printf("<int>\n<name>\n<float' 'float>\n<clue>\n<int>\n");
+            exit(1);
+        }
+        
         add(hunt_id, input);
     }
     else if(strcmp(option, "list") == 0){
@@ -331,6 +334,5 @@ int main(int argc, char* argv[]){
         remove_hunt(hunt_id);
     }
 
-    fclose(input);
     return 0;
 }
