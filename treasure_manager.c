@@ -1,4 +1,7 @@
 // Repo: https://github.com/Casperu20/OS_PROJECT
+
+// PHASE 1:
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -278,7 +281,7 @@ void remove_hunt(char* hunt_dir){
 // MODIFY THE FILE: input_for_add.txt
 // for each new treasure u want to add!
 
-int main(int argc, char* argv[]){
+int main(int argc, char* argv[]){   
     if(argc < 2){
         printf("USE: ./file OPTION [add / list / view / remove_treasure / remove_hunt] .....\n");
         exit(1);
