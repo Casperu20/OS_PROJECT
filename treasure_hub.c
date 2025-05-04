@@ -116,6 +116,34 @@ void start_monitor(){
     }
 }
 
+void cmd_to_monitor(const char* command){
+    if (monitor_pid <= 0) {
+        printf("-> NO monitor running\n");
+        return;
+    }
+
+    FILE *cmd = fopen(".hub_commands_used", "w");
+    if (!cmd) {
+        perror("ERROR fopen() after stop_monitor\n");
+        return;
+    }
+
+    fprintf(cmd, "%s\n", command);
+    fclose(cmd);
+
+    kill(monitor_pid, SIGUSR1);
+}
+
+void stop_monitor(){
+    if (monitor_pid <= 0) {
+        printf("-> monitor not started yet\n");
+        return;
+    }
+
+    cmd_to_monitor("stop_monitor");
+    monitor_stopping = 1;
+}
+
 
 // the hub itself
 
@@ -124,11 +152,13 @@ int main(){
         // Mainly if i dont handle sigchild, the monitor process would become a zombie after exit
 
     struct sigaction sa_chld;       // set up a signal handler for SIGCHLD!!  LATER USE sigaction() 
-
-    sa_chld.sa_handler = sigchld_handler;   // set handler func to a sigchld_handler 
-    sigemptyset(&sa_chld.sa_mask);          // block no additional signals
-    sa_chld.sa_flags = SA_RESTART;          // if interupted by a signal, restart
-    sigaction(SIGCHLD, &sa_chld, NULL);         // REGISTER final for SIGCHILD signal   
+        // maybe course version is better:
+    memset(&sa_chld, 0x00, sizeof(struct sigaction));
+    sa_chld.sa_handler = sigchld_handler;
+    if (sigaction(SIGCHLD, &sa_chld, NULL) < 0) {
+        perror("sigaction SIGCHLD");
+        exit(-1);
+    }
 
     char input[BUFF_SIZE];
 
@@ -141,24 +171,38 @@ int main(){
 
         input[strcspn(input, "\n")] = '\0'; // remove \n
 
+        if(monitor_stopping){
+            printf("--> monitor is shutting down ....\n");
+            continue;
+        }
+
         if (strcmp(input, "start_monitor") == 0) {
             start_monitor();
         }
-
         else if (strcmp(input, "stop_monitor") == 0) {
             if (monitor_pid > 0) {
-                // stop_monitor();
-            } else {
+                stop_monitor();
+            } 
+            else {
                 printf("-> HUB: MONITOR not started yet!\n");
             }
         }
         else if (strcmp(input, "exit") == 0) {
             if (monitor_pid > 0) {
                 printf("-> HUB: MONITOR ERROR with exit, still run!\n");
-            } else {
+            } 
+            else {
                 printf("-> HUB: Exiting the hub\n");
                 break;
             }
         }
+
+        // neeed for 1st phase cmds - list_hunts, list_treasures, view_treasure
+
+        else{
+            printf("use an existent command pls!\n");
+        }
     }
+
+    return 0;
 }
