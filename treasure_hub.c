@@ -32,13 +32,90 @@ volatile sig_atomic_t monitor_stopping = 0;
 
 // to DO
 
-// MONITOR command part
-
-
-
 // signal handlers 
 
-void sigchld_handler(int sig); // carefull at the Note: For setting up signal behaviour, you must use sigaction(), not signal().
+void sigchld_handler(int sig){ // carefull at the Note: For setting up signal behaviour, you must use sigaction(), not signal().
+    int status;
+    pid_t pid = wait(&status);
+    if (pid == monitor_pid) {
+        printf("-> Monitor exited! --> status = %d\n", WEXITSTATUS(status));
+        monitor_pid = -1;
+        monitor_stopping = 0;
+    }
+}
+
+void handle_usr1(int sig) {
+    FILE *file_output = fopen(".hub_commands_used", "r");
+    if (!file_output){
+        printf("!-> Monitor cannot read ._hub_commands_used");
+        return;
+    }
+
+    char buffer[BUFF_SIZE];
+    fgets(buffer, sizeof(buffer), file_output);
+
+    buffer[strcspn(buffer, "\n")] = '\0';
+
+    char *tok = strtok(buffer, " ");
+    if (strcmp(tok, "list_hunts") == 0) {
+        printf("[Monitor] -> will list hunts here\n");
+    }
+    else if (strcmp(tok, "stop_monitor") == 0) {
+        printf("[Monitor] -> shutting down in 2 seconds...\n");
+        usleep(2000000);
+        exit(0);
+    }
+    else if (strcmp(tok, "view_treasure") == 0) {
+        printf("[Monitor] -> will view treasure from hunt: %s with ID: %s\n", strtok(NULL, " "), strtok(NULL, " "));
+    }   
+    else if (strcmp(tok, "list_treasures") == 0) {
+        printf("[Monitor] -> will list treasures from hunt: %s\n", strtok(NULL, " "));
+    } 
+    
+    else {
+        printf("[Monitor] Unknown command: %s\n", tok);
+    }
+
+    fclose(file_output);
+}
+
+// MONITOR command part
+
+void start_monitor(){
+    if(monitor_pid > 0){
+        printf("-> Monitor already running!\n");
+        return;
+    }
+
+    monitor_pid = fork();
+
+    if(monitor_pid < 0){
+        perror("FORK error!\n");
+        exit(1);
+    }
+    else if(monitor_pid == 0){  // child procces
+        printf("-> Monitor started --> PID = %d\n", getpid());
+
+        // SIGUSR1 handler
+        struct sigaction sa_usr1;
+        memset(&sa_usr1, 0x00, sizeof(struct sigaction));
+        sa_usr1.sa_handler = handle_usr1;
+        if (sigaction(SIGUSR1, &sa_usr1, NULL) < 0) {
+            perror("Monitor SIGUSR1 sigaction");
+            exit(-1);
+        }
+
+        while(1){
+            pause();
+        }
+
+        exit(0);
+    }
+    else{
+        printf("-> monitor process launched (to the moon): PID = %d\n", monitor_pid);
+    }
+}
+
 
 // the hub itself
 
@@ -65,7 +142,7 @@ int main(){
         input[strcspn(input, "\n")] = '\0'; // remove \n
 
         if (strcmp(input, "start_monitor") == 0) {
-            // start_monitor();
+            start_monitor();
         }
 
         else if (strcmp(input, "stop_monitor") == 0) {
