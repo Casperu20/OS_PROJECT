@@ -51,7 +51,7 @@ void action_list_hunts() {
 
     struct dirent* entry;
     while ((entry = readdir(root_directory)) != NULL) {
-        printf("Checking dir: %s\n", entry->d_name);    // debug
+        // printf("Checking dir: %s\n", entry->d_name);    // debug
 
         if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")) {
             char path[MAX];
@@ -198,7 +198,6 @@ void start_monitor(){
         exit(1);
     }
     else if(monitor_pid == 0){  // child procces
-        setvbuf(stdout, NULL, _IONBF, 0);  // Disable stdout buffering
         printf("-> Monitor started --> PID = %d\n", getpid());
 
         // SIGUSR1 handler
@@ -249,9 +248,7 @@ void stop_monitor(){
     monitor_stopping = 1;
 }
 
-
 // the hub itself
-
 
 int main(){
         // Mainly if i dont handle sigchild, the monitor process would become a zombie after exit
