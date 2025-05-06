@@ -1,3 +1,4 @@
+    // PHASE 2
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,9 +30,6 @@ typedef struct Treasure{
 pid_t monitor_pid = -1;
 volatile sig_atomic_t monitor_stopping = 0;
 
-
-// to DO
-
 // signal handlers 
 
 void sigchld_handler(int sig){ // carefull at the Note: For setting up signal behaviour, you must use sigaction(), not signal().
@@ -43,6 +41,94 @@ void sigchld_handler(int sig){ // carefull at the Note: For setting up signal be
         monitor_stopping = 0;
     }
 }
+
+void action_list_hunts() {
+    DIR* root_directory = opendir(".");
+    if (!root_directory) {
+        printf("!-> Monitor could not open root dir!\n");
+        return;
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(root_directory)) != NULL) {
+        if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")) {
+            char path[MAX];
+            snprintf(path, sizeof(path), "%s/treasure.dat", entry->d_name);
+            
+            struct stat st; // file info
+            if (stat(path, &st) == 0) {
+                int number_of_treasures = st.st_size / sizeof(Treasure);    // st.st_size = total size of file, in bytes dah
+                printf("[Monitor] = Hunt: %s --> total treasures: %d\n", entry->d_name, number_of_treasures);
+            }
+        }
+    }
+    closedir(root_directory);
+}
+
+void action_list_treasures(const char* hunt) {
+    char path[MAX];
+    snprintf(path, sizeof(path), "%s/treasure.dat", hunt);
+
+    int fd = open(path, O_RDONLY);
+    if (fd == -1) {
+        printf("!-> Monitor cannot open treasure file!\n");
+        return;
+    }
+
+    Treasure current_treasure;
+    ssize_t bytes_read;
+
+    printf("[Monitor] = treasures in %s:\n", hunt);
+    while ((bytes_read = read(fd, &current_treasure, sizeof(Treasure))) == sizeof(Treasure)) {
+        printf(" - ID: %d, User: %s, Coords: %.4f %.4f\n", current_treasure.treasure_ID, current_treasure.user_name, current_treasure.GPS.latitude, current_treasure.GPS.longitude);
+        printf(" - clue: %s\n", current_treasure.clue);
+        printf(" - value: %d\n", current_treasure.value);
+    }
+
+    if (bytes_read == -1) {
+        printf("!-> Error reading treasure file");
+    }
+
+    close(fd);
+}
+
+
+void action_view_treasure(const char* hunt, int id) {
+    char path[MAX];
+    snprintf(path, sizeof(path), "%s/treasure.dat", hunt);
+
+    int fd = open(path, O_RDONLY);
+    if (fd == -1) {
+        printf("!-> Monitor cannot open treasure file!\n");
+        return;
+    }
+
+    Treasure current_treasure;
+    ssize_t bytes_read;
+    int found = 0;
+
+    while ((bytes_read = read(fd, &current_treasure, sizeof(Treasure))) == sizeof(Treasure)) {
+        if (current_treasure.treasure_ID == id) {
+            printf("[Monitor] = found Treasure:\n");
+            printf(" - ID: %d, User: %s, Coordinates: %.5f %.5f\n", current_treasure.treasure_ID, current_treasure.user_name, current_treasure.GPS.latitude, current_treasure.GPS.longitude);
+            printf(" - Clue: %s\n", current_treasure.clue);
+            printf(" - Value: %d\n", current_treasure.value);
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found) {
+        printf("!-> (view_treasure) treasure with ID %d not found in %s!\n", id, hunt);
+    }
+
+    if (bytes_read == -1){
+        printf("!-> Error reading treasure file");
+    }
+
+    close(fd);
+}
+
 
 void handle_usr1(int sig) {
     FILE *file_output = fopen(".hub_commands_used", "r");
@@ -58,7 +144,8 @@ void handle_usr1(int sig) {
 
     char *tok = strtok(buffer, " ");
     if (strcmp(tok, "list_hunts") == 0) {
-        printf("[Monitor] -> will list hunts here\n");
+        printf("[Monitor] -> list_hunts:\n");
+        action_list_hunts();
     }
     else if (strcmp(tok, "stop_monitor") == 0) {
         printf("[Monitor] -> shutting down in 2 seconds...\n");
@@ -66,10 +153,25 @@ void handle_usr1(int sig) {
         exit(0);
     }
     else if (strcmp(tok, "view_treasure") == 0) {
-        printf("[Monitor] -> will view treasure from hunt: %s with ID: %s\n", strtok(NULL, " "), strtok(NULL, " "));
+        char *hunt = strtok(NULL, " ");
+        char *id_str = strtok(NULL, " ");
+        if (!hunt || !id_str) {
+            printf("!-> (view_treasyre) Monitor is missing hunt or treasure ID!\n");
+            return;
+        }
+        printf("[Monitor] -> view_treasure from hunt: %s with ID: %s\n", hunt, id_str);
+
+        action_view_treasure(hunt, atoi(id_str));
     }   
     else if (strcmp(tok, "list_treasures") == 0) {
-        printf("[Monitor] -> will list treasures from hunt: %s\n", strtok(NULL, " "));
+        char *hunt = strtok(NULL, " ");
+        if (!hunt) {
+            printf("-> (list_treasures) Monitor missing hunt ID!\n");
+            return;
+        }
+        printf("[Monitor] -> list_treasures from hunt: %s\n", hunt);
+
+        action_list_treasures(hunt);
     } 
     
     else {
@@ -124,7 +226,7 @@ void cmd_to_monitor(const char* command){
 
     FILE *cmd = fopen(".hub_commands_used", "w");
     if (!cmd) {
-        perror("ERROR fopen() after stop_monitor\n");
+        printf("ERROR fopen() after stop_monitor\n");
         return;
     }
 
@@ -152,7 +254,6 @@ int main(){
         // Mainly if i dont handle sigchild, the monitor process would become a zombie after exit
 
     struct sigaction sa_chld;       // set up a signal handler for SIGCHLD!!  LATER USE sigaction() 
-        // maybe course version is better:
     memset(&sa_chld, 0x00, sizeof(struct sigaction));
     sa_chld.sa_handler = sigchld_handler;
     if (sigaction(SIGCHLD, &sa_chld, NULL) < 0) {
