@@ -51,6 +51,8 @@ void action_list_hunts() {
 
     struct dirent* entry;
     while ((entry = readdir(root_directory)) != NULL) {
+        printf("Checking dir: %s\n", entry->d_name);    // debug
+
         if (entry->d_type == DT_DIR && strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")) {
             char path[MAX];
             snprintf(path, sizeof(path), "%s/treasure.dat", entry->d_name);
@@ -196,6 +198,7 @@ void start_monitor(){
         exit(1);
     }
     else if(monitor_pid == 0){  // child procces
+        setvbuf(stdout, NULL, _IONBF, 0);  // Disable stdout buffering
         printf("-> Monitor started --> PID = %d\n", getpid());
 
         // SIGUSR1 handler
@@ -298,8 +301,9 @@ int main(){
             }
         }
 
-        // neeed for 1st phase cmds - list_hunts, list_treasures, view_treasure
-
+        else if (strncmp(input, "list_hunts", 10) == 0 || strncmp(input, "list_treasures", 14) == 0 || strncmp(input, "view_treasure", 13) == 0) {
+            cmd_to_monitor(input);  // forward full command to monitor
+        }
         else{
             printf("use an existent command pls!\n");
         }
