@@ -30,6 +30,8 @@ typedef struct Treasure{
 pid_t monitor_pid = -1;
 volatile sig_atomic_t monitor_stopping = 0;
 
+int monitor_pipefd[2]; // idx [0] = read, [1] = write
+
 // signal handlers 
 
 void sigchld_handler(int sig){ // carefull at the Note: For setting up signal behaviour, you must use sigaction(), not signal().
@@ -61,6 +63,7 @@ void action_list_hunts() {
             if (stat(path, &st) == 0) {
                 int number_of_treasures = st.st_size / sizeof(Treasure);    // st.st_size = total size of file, in bytes dah
                 printf("[Monitor] = Hunt: %s --> total treasures: %d\n", entry->d_name, number_of_treasures);
+                fflush(stdout);
             }
         }
     }
@@ -83,8 +86,11 @@ void action_list_treasures(const char* hunt) {
     printf("[Monitor] = treasures in %s:\n", hunt);
     while ((bytes_read = read(fd, &current_treasure, sizeof(Treasure))) == sizeof(Treasure)) {
         printf(" - ID: %d, User: %s, Coords: %.4f %.4f\n", current_treasure.treasure_ID, current_treasure.user_name, current_treasure.GPS.latitude, current_treasure.GPS.longitude);
+        fflush(stdout);
         printf(" - clue: %s\n", current_treasure.clue);
+        fflush(stdout);
         printf(" - value: %d\n", current_treasure.value);
+        fflush(stdout);
     }
 
     if (bytes_read == -1) {
@@ -112,9 +118,13 @@ void action_view_treasure(const char* hunt, int id) {
     while ((bytes_read = read(fd, &current_treasure, sizeof(Treasure))) == sizeof(Treasure)) {
         if (current_treasure.treasure_ID == id) {
             printf("[Monitor] = found Treasure:\n");
+            fflush(stdout);
             printf(" - ID: %d, User: %s, Coordinates: %.5f %.5f\n", current_treasure.treasure_ID, current_treasure.user_name, current_treasure.GPS.latitude, current_treasure.GPS.longitude);
+            fflush(stdout);
             printf(" - Clue: %s\n", current_treasure.clue);
+            fflush(stdout);
             printf(" - Value: %d\n", current_treasure.value);
+            fflush(stdout);
             found = 1;
             break;
         }
@@ -122,6 +132,7 @@ void action_view_treasure(const char* hunt, int id) {
 
     if (!found) {
         printf("!-> (view_treasure) treasure with ID %d not found in %s!\n", id, hunt);
+        fflush(stdout);
     }
 
     if (bytes_read == -1){
@@ -136,6 +147,7 @@ void handle_usr1(int sig) {
     FILE *file_output = fopen(".hub_commands_used", "r");   // pass command details like from SIGUSR1
     if (!file_output){
         printf("!-> Monitor cannot read ._hub_commands_used");
+        fflush(stdout);
         return;
     }
 
@@ -147,10 +159,12 @@ void handle_usr1(int sig) {
     char *tok = strtok(buffer, " ");
     if (strcmp(tok, "list_hunts") == 0) {
         printf("[Monitor] -> list_hunts:\n");
+        fflush(stdout);
         action_list_hunts();
     }
     else if (strcmp(tok, "stop_monitor") == 0) {
         printf("[Monitor] -> shutting down in 2 seconds...\n");
+        fflush(stdout);
         usleep(2000000);
         exit(0);
     }
@@ -159,25 +173,29 @@ void handle_usr1(int sig) {
         char *id_str = strtok(NULL, " ");
         if (!hunt || !id_str) {
             printf("!-> (view_treasyre) Monitor is missing hunt or treasure ID!\n");
+            fflush(stdout);
             return;
         }
         printf("[Monitor] -> view_treasure from hunt: %s with ID: %s\n", hunt, id_str);
-
+        fflush(stdout);
         action_view_treasure(hunt, atoi(id_str));
     }   
     else if (strcmp(tok, "list_treasures") == 0) {
         char *hunt = strtok(NULL, " ");
         if (!hunt) {
             printf("-> (list_treasures) Monitor missing hunt ID!\n");
+            fflush(stdout);
             return;
         }
         printf("[Monitor] -> list_treasures from hunt: %s\n", hunt);
+        fflush(stdout);
 
         action_list_treasures(hunt);
     } 
     
     else {
         printf("[Monitor] Unknown command: %s\n", tok);
+        fflush(stdout);
     }
 
     fclose(file_output);
@@ -191,6 +209,11 @@ void start_monitor(){
         return;
     }
 
+    if (pipe(monitor_pipefd) == -1) {
+        printf("! ERROR in start_monitor() with pipe!\n");
+        exit(1);
+    }
+
     monitor_pid = fork();
 
     if(monitor_pid < 0){
@@ -198,7 +221,12 @@ void start_monitor(){
         exit(1);
     }
     else if(monitor_pid == 0){  // child procces
-        printf("-> Monitor started --> PID = %d\n", getpid());
+        // printf("-> Monitor started --> PID = %d\n", getpid()); it will be sended through PIPE to the hub process (PHASE 3)
+        close(monitor_pipefd[0]); // close unused read end
+
+        // redirect stdout to our PIPE!
+        dup2(monitor_pipefd[1], STDOUT_FILENO);
+        close(monitor_pipefd[1]);
 
         // SIGUSR1 handler
         struct sigaction sa_usr1;
@@ -210,12 +238,13 @@ void start_monitor(){
         }
 
         while(1){
-            pause();
+            pause();    // waity for singnals
         }
 
         exit(0);
     }
     else{
+        close(monitor_pipefd[1]); // close unused
         printf("-> monitor process launched (to the moon): PID = %d\n", monitor_pid);
     }
 }
@@ -236,6 +265,23 @@ void cmd_to_monitor(const char* command){
     fclose(cmd);
 
     kill(monitor_pid, SIGUSR1);
+
+    // now read from the PIPE (phase 3)
+    char buffer[BUFF_SIZE];
+    ssize_t bytes_read;
+
+     usleep(100 * 1000); // small delay to let monitor write
+    
+    printf("\n");
+    while((bytes_read = read(monitor_pipefd[0], buffer, sizeof(buffer) - 1)) > 0) {
+        buffer[bytes_read] = '\0';
+        printf("%s", buffer);
+        
+        if (bytes_read < BUFF_SIZE - 1){
+            break; // stop
+        }
+    }
+    printf("\n");
 }
 
 void stop_monitor(){
