@@ -15,6 +15,7 @@
 
 #define BUFF_SIZE 256
 #define MAX 512
+#define MAX_USERS 100
 
 typedef struct Treasure{
     int treasure_ID;
@@ -27,12 +28,17 @@ typedef struct Treasure{
     int value;  
 } Treasure;
 
+typedef struct {
+    char user_name[MAX];
+    int total_value;
+} User_score;
+
 
 // IN treasure_hub.c also add the handling for calculating score
 
 int main(int argc, char* argv[]){
     if (argc < 2){
-        printf("USE: %s ^hunt_directory^ !\n");
+        printf("USE: name ^hunt_directory^ !\n");
         exit(1);
     }
 
@@ -45,5 +51,31 @@ int main(int argc, char* argv[]){
         exit(1);
     }
 
+    Treasure current_treasure;
+    User_score scores[MAX_USERS];
+    
+    int counter = 0;
+    while(read(fd, &current_treasure, sizeof(Treasure)) == sizeof(Treasure)){
+        int found_user = 0;
+        for(int i = 0; i < counter; i++){
+            if(strcmp(scores[i].user_name, current_treasure.user_name) == 0){
+                scores[i].total_value = scores[i].total_value + current_treasure.value;
+                found_user = 1;
+                break;
+            }
+        }
+
+        if(found_user == 0){
+            strcpy(scores[counter].user_name, current_treasure.user_name);
+            scores[counter].total_value = current_treasure.value;
+            counter++;
+        }
+    }
+
+    for(int i = 0; i < counter; i++){
+        printf("USER = %s has %d points!\n", scores[i].user_name, scores[i].total_value);
+    }
+
+    close(fd);
     return 0;
 }
