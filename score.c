@@ -38,7 +38,7 @@ typedef struct {
 
 int main(int argc, char* argv[]){
     if (argc < 2){
-        printf("USE: name ^hunt_directory^ !\n");
+        printf("USE: ./score ^hunt_directory^ !\n");
         exit(1);
     }
 

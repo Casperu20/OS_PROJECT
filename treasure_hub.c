@@ -133,7 +133,7 @@ void action_view_treasure(const char* hunt, int id) {
 
 
 void handle_usr1(int sig) {
-    FILE *file_output = fopen(".hub_commands_used", "r");
+    FILE *file_output = fopen(".hub_commands_used", "r");   // pass command details like from SIGUSR1
     if (!file_output){
         printf("!-> Monitor cannot read ._hub_commands_used");
         return;
@@ -248,6 +248,54 @@ void stop_monitor(){
     monitor_stopping = 1;
 }
 
+// handle calculate_score from phase 3: score.c
+void calculate_score(){
+    DIR* root_directory = opendir(".");
+    if(!root_directory){
+        printf("! ERROR in calculate_score() with opendir\n");
+        return;
+    }
+
+    struct dirent* entry;
+    while((entry = readdir(root_directory))){
+        if(entry->d_type == DT_DIR && strcmp(entry->d_name, ".") && strcmp(entry->d_name, "..")){
+            pid_t pid;
+            int pipefd[2];
+
+            pipe(pipefd);
+
+            pid = fork();
+            if(pid == 0){   // child process
+                close(pipefd[0]); // close read end
+                dup2(pipefd[1], STDOUT_FILENO); // redirect our stdoyt
+                close(pipefd[1]);
+
+                execl("./score", "./score", entry->d_name, (char*)NULL);
+                perror("exec failed!");
+                exit(1);
+            }
+            else{   // parent process
+                close(pipefd[1]); // close write end
+                printf("Scores for hunt = %s is:\n", entry->d_name);
+
+                char buffer[BUFF_SIZE];
+                ssize_t bytes_read;
+                while((bytes_read = read(pipefd[0], buffer, sizeof(buffer) - 1)) > 0){
+                    buffer[bytes_read] = '\0';
+                    printf("%s", buffer);
+                }
+                close(pipefd[0]);
+
+                waitpid(pid, NULL, 0);
+                printf("\n");
+            }
+        }
+    }
+
+    closedir(root_directory);
+}
+
+
 // the hub itself
 
 int main(){
@@ -300,6 +348,9 @@ int main(){
 
         else if (strncmp(input, "list_hunts", 10) == 0 || strncmp(input, "list_treasures", 14) == 0 || strncmp(input, "view_treasure", 13) == 0) {
             cmd_to_monitor(input);  // forward full command to monitor
+        }
+        else if(strcmp(input, "calculate_score") == 0){
+            calculate_score();
         }
         else{
             printf("use an existent command pls!\n");
