@@ -1,4 +1,7 @@
-    // PHASE 2
+// Repo: https://github.com/Casperu20/OS_PROJECT
+
+// PHASE 2
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,7 +31,7 @@ typedef struct Treasure{
 } Treasure;
 
 pid_t monitor_pid = -1;
-volatile sig_atomic_t monitor_stopping = 0;
+volatile sig_atomic_t monitor_stopping = 0; // kind of a special integer type guaranteed to be read/written atomically (no signal interupt)
 
 int monitor_pipefd[2]; // idx [0] = read, [1] = write
 
@@ -154,7 +157,7 @@ void handle_usr1(int sig) {
     char buffer[BUFF_SIZE];
     fgets(buffer, sizeof(buffer), file_output);
 
-    buffer[strcspn(buffer, "\n")] = '\0';
+    buffer[strcspn(buffer, "\n")] = '\0';   // citeste pozitia pt \n 
 
     char *tok = strtok(buffer, " ");
     if (strcmp(tok, "list_hunts") == 0) {
@@ -163,9 +166,9 @@ void handle_usr1(int sig) {
         action_list_hunts();
     }
     else if (strcmp(tok, "stop_monitor") == 0) {
-        printf("[Monitor] -> shutting down in 2 seconds...\n");
+        printf("[Monitor] -> shutting down in 5 seconds...\n");
         fflush(stdout);
-        usleep(2000000);
+        usleep(5000000);
         exit(0);
     }
     else if (strcmp(tok, "view_treasure") == 0) {
@@ -220,7 +223,7 @@ void start_monitor(){
         perror("FORK error!\n");
         exit(1);
     }
-    else if(monitor_pid == 0){  // child procces
+    else if(monitor_pid == 0){  // child procces (adica Monitor )
         // printf("-> Monitor started --> PID = %d\n", getpid()); it will be sended through PIPE to the hub process (PHASE 3)
         close(monitor_pipefd[0]); // close unused read end
 

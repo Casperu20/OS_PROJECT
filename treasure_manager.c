@@ -85,7 +85,7 @@ void add(char* hunt_dir, FILE* input){
     snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.dat", hunt_dir); // WITH .txt FILES WORKS PERFECLTY (that s how I implemented firstly)
 
     // open the file . IF !exist then create
-    int file_tr = open(treasure_file, O_RDWR | O_CREAT | O_APPEND, 0664);
+    int file_tr = open(treasure_file, O_RDWR | O_CREAT | O_APPEND, 0664); // owner rw-, group rw- si others r-
     if(file_tr == -1){
         printf("ERROR WITH OPENNING FILE!\n");
         exit(1);
@@ -104,7 +104,7 @@ void add(char* hunt_dir, FILE* input){
             exit(1);
     }
     
-    // now write into the file
+    // now write into the file  
     ssize_t binary_written = write(file_tr, &new_treasure, sizeof(Treasure));
     if(binary_written != -1){
         printf("Succeded to add treasure: %ld bytes written\n", binary_written);
@@ -124,7 +124,8 @@ void add(char* hunt_dir, FILE* input){
 void list(char* hunt_dir){
     char treasure_file[BUFF_SIZE];
     // for now hope for not having an overflow
-    sprintf(treasure_file, "%s/treasure.dat", hunt_dir);
+    // sprintf(treasure_file, "%s/treasure.dat", hunt_dir);
+    snprintf(treasure_file, sizeof(treasure_file), "%s/treasure.dat", hunt_dir);
 
     int file_tr = open(treasure_file, O_RDWR | O_CREAT | O_APPEND, 0644);
     if(file_tr == -1){
@@ -133,12 +134,13 @@ void list(char* hunt_dir){
     }
     
     // First print the hunt name, the (total) file size and last modification time of its treasure file(s). then treasures !
-    struct stat temp;
+
+    struct stat temp;   // man: stat = display file or  file system status      | stat(path, DESTINATION) 
     if(stat(treasure_file, &temp) == 0){
         printf(" --- FOUND in hunt -> %s ---\n", hunt_dir);
-        printf(" --- Total file size = %ld bytes --- \n", temp.st_size);
+        printf(" --- Total file size = %ld bytes --- \n", temp.st_size);        // statfs
         printf(" --- Last modification = %s \n", ctime(&temp.st_mtime));
-    }
+    } 
 
     Treasure found_treasure;
     ssize_t bytes_read;
@@ -235,7 +237,7 @@ void remove_treasure(char* hunt_dir, int ID){
     close(temp_tr);
 
     if(found){
-        remove(treasure_file);
+        remove(treasure_file);      // man: it can remove a file OR a dir
         rename(temp_treasure, treasure_file);   // replace with the next one
         printf("Treasure[%d] removed!\n", ID);
         create_log(hunt_dir, "REMOVE treasure");
